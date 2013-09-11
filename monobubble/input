@@ -1,0 +1,146 @@
+&input for the heating layer
+
+! _____________________________________________________________________________
+! Parameters for general running of DUMSES
+! - restart:
+!   - for a fresh start, set restart to zero
+!   - to restart a previous simulation, set restart to the number of the output
+!     file to restart from
+! - tlim:
+!   - the end time for the simulation (in seconds)
+! - verbose:
+!   - true/false flag to control verbosity (extra output)
+
+&start_params
+     restart = 0
+    ,tlim    = 1.0d2
+    ,verbose = .false. /
+
+! _____________________________________________________________________________
+! Parameters for the numerical scheme to be used by DUMSES
+! - n[xyz]_glob:
+!   - the number of cells in the [xyz] direction (uniform grid)
+! - riemann/riemann2d
+!   - the Riemann solver to use (for 1D/multi-D?)
+!   - options are: 'roe', 'llf', 'hll', 'hlld', 'upwind', 'hydro'
+! - slope_type:
+!   - the slope limiter
+!   - options are: minmod (1?), average (2?), positivity-preserving 3D (3)
+! - bval_in/bval_out:
+!   - the boundary conditions at the lower/upper edge in each direction
+!   - given as a list of integers: x, y, z (or x, y for 2D, or x for 1D)
+!   - options are: periodic (1), zero-gradient (2), shearing-sheet (3),
+!     user-defined (4)
+! - courant:
+!   - maximum allowed fraction of a Courant time step
+! - fargo
+
+&scheme_params
+     nx_glob    = 1600
+    ,ny_glob    = 800
+    ,nz_glob    = 1
+    ,riemann    = 'hlld'
+    ,riemann2d  = 'hlld'
+    ,slope_type = 2
+    ,bval_in    = 2,1
+	 ,bval_out   = 2,1
+    ,courant    = 0.7 /
+
+! _____________________________________________________________________________
+! Parameters for the domain
+! - [xyz]min/[xyz]max:
+!   - the upper and lower limits of the domain in the [xyz] direction
+! - geom
+! - gamma
+! - Omega0
+! - ciso
+! - nu
+! - eta
+
+&model_params
+     xmin = -12.56637061
+    ,xmax =  12.56637061
+    ,ymin = -6.283185307
+    ,ymax =  6.283185307  /
+
+! _____________________________________________________________________________
+! Parameters for outputting
+! - dtdump:
+!   - how often (in seconds) to dump a full output file
+! - dthist:
+!   - how often (in seconds) to call the history output routine
+! - dtspec:
+!   - how often (in seconds) to call the special output routine
+! - use_collective_io
+! - store_ghost
+! - store_sides
+! - inline_io
+
+&output_params
+    ,dthist = 1.0d5
+    ,dtdump = 1.0d0
+	 ,dtspec = 1.0d5 /
+
+! _____________________________________________________________________________
+! Parameters to control MPI
+! - n[xyz]slice:
+!   - the number of slices to split the domain into along the [xyz] direction 
+!     for sharing across processors
+
+&mpicon
+     nxslice = 4
+    ,nyslice = 1
+    ,nzslice = 1 /
+
+! _____________________________________________________________________________
+! Parameters  for this particular problem setup
+! - Mup:
+!   - the Mach number at the top of the buoyant layer
+! - Kheat:
+!   - the heating scale coefficient (unitless)
+! - Kgrav:
+!   - the gravity scale coefficient (unitless)
+! - gamma:
+!   - the adiabatic index
+! - layer_shape:
+!   - the shape of the buoyant layer profile
+!   - options are: 'trapezoid', 'square'
+! - layer_limit:
+!   - the extent of the layer (layer extends from -layer_limit to +layer_limit)
+! - amprand:
+!   - the amplitude of random perturbations
+! - amp_min:
+!   - the minimum amplitude of all perturbations
+! - pert:
+!   - how to apply perturbations
+!   - options are 'rho', 'rhogrid', 'vgrid'
+! - spectrum:
+!   - perturbation amplitude spectrum
+!   - options are: 'flat', 'quadratic'
+! - n[xy]min/n[xy]max:
+!   - the range of modes to apply random perturbations to (k = 2*pi*n/L)
+! - pertseed:
+!   - seed value for random number generator used in perturbations
+! - xpmin/xpmax:
+!   - the limits in the x direction for the perturbations (defaults to entire
+!     buoyant layer)
+
+&physics_params
+    Mup         = 1.0d-1
+   ,Kheat       = 3.278280d-2
+	,Kgrav       = 1.0d0
+	,gamma       = 1.3333333333333333333333333333333d0
+   ,layer_shape = 'trapezoid'
+   ,layer_limit = 1.0d0
+	,amprand     = 1.0d-7
+	,amp_min     = 0.0d0
+	,pert        = 'rho'  
+	,spectrum    = 'flat'
+	,nxmin       = 0
+	,nxmax       = 0
+	,nymin       = 1
+	,nymax       = 60
+   ,xpmin       = -1.0d0
+   ,xpmax       = 1.0d0
+	,pertseed    = 2 /
+

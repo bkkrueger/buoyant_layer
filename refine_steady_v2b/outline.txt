@@ -1,0 +1,91 @@
+-- Construct initial guess for steady state:
+   -- Jerome's method constructs (x, dens, momx, ener) in slices distributed
+      across the processors.
+   -- Merge the results into a large array of (dens, momx, ener), with each
+      processor having a copy of the entire array.  Call this array <ss>
+-- Prepare for iteration procedure:
+   -- Compute relative change in each cell over a single time step:
+      -- As input, pass in <ss>; call the output <ff>.
+      -- Distribute input array across the processors.
+      -- Run a single hydrodynamics step.
+      -- Compute the relative change in (dens, momx, ener) in each cell.
+      -- Merge this data so that each processor has a complete copy.
+   -- Select delta (dens, momx, ener):
+      -- Take some fraction (e.g. 0.1%) of the largest absolute value in <ff>
+         for each variable.
+   -- Construct the Jacobian:
+      -- Loop over all vector elements (cell-variable pairs):
+         -- Construct <ss_J> as a copy of <ss>, but then shift the selected
+            element by the appropriate delta.
+         -- Compute the relative change as above.  Call this <ff_J>.
+         -- Construct the Jacobian column corresponding to this element as
+            (<ff_J> - <ff>)/<delta>.
+      -- Verify the expected Jacobian structure:
+         -- Knowing the stencil of the DUMSES algorithm, we expect that the
+            Jacobian is pentadiagonal.
+         -- Check that non-pentadiagonal entries are negligible (allow for
+            non-zero values due to numerical error).
+   -- Invert the Jacobian
+      -- For each element, use BiCGStab to solve <J> <Jinv[:,e]> = <I[:,e]>.
+      -- The matvec can be simpler than a full matvec due to the pentadiagonal
+         structure of the Jacobian:
+         -- Since we are constructing the Jacobian numerically, it is not
+            guaranteed that non-pentadiagonal elements will be precisely zero.
+         -- We can perform a test after constructing the Jacobian to ensure
+            that non-pentadiagonal elements have significantly smaller
+            magnitude than pentadiagonal elements.
+         -- To distinguish the special Krylov-specific matvec to be used here
+            from the general-purpose matvec (needed below), we should give this
+            a special name (e.g. Krylov_matvec or Jvec or pentamatvec).
+-- Iteratively refine steady state:
+   -- Find the corrections to <ss>:
+      -- Matrix-vector multiply: <dss> = right_multiply(<Jinv>, <ff>).
+      -- Formally it should be <dss> = <Jinv> (<ff> - <ff_target>), but
+         <ff_target> is the zero vector (as we want a steady state, which would
+         have a relative change of zero in all cells).
+   -- Cycle <ss>:
+      -- Save previous value: <ss_old> = <ss>.
+      -- Update current value: <ss> = <ss> + <dss>.
+   -- Cycle <ff>:
+      -- Save previous value: <ff_old> = <ff>.
+      -- Update current value: Compute relative change <ff> from new <ss>.
+   -- Check convergence:
+      -- If all values of <ff> are below some tolerance, break from the loop
+   -- Update the inverse of the Jacobian:
+      -- Construct <dff> = <ff> - <ff_old>.
+      -- Temporary: <vv> = right_multiply(<Jinv>, <dff>).
+         -- Note: Since the Krylov solver uses a specific matvec (we only
+            call the Krylov solver on the initial Jacobian, which we can
+            reasonably assume to have a pentadiagonal structure (or nearly
+            so), so that matvec can be simplified.  I should write two
+            separate matvec routines: one optimized for the Krylov solver
+            and one to be used here with a general matrix (as we cannot make
+            guarantees about the sparsity structure of the numerical
+            estimates of the inverse Jacobian).
+      -- Numerator: <numer> = vector_axpy(-1*<vv> + <dss>).
+      -- Denominator: <denom> = inner_product(<dss>, <vv>).
+      -- Temporary vector: <ww> = <numer> / <denom>.
+      -- Temporary vector: <vv> = left_multiply(<dss>, <Jinv>):
+         -- Using properties of the transpose, we can rewrite this
+            left-multiply as a transpose and a right-multiply.
+         -- The result of this process is a transposed vector, but I store
+            all vectors (<vec> and <vec>^T) the same, so the final transpose
+            can be neglected.
+         -- <vv> = right_multiply(<Jinv>^T, <dss>)
+      -- Change in inverse Jacobian: <dJinv> = outer_product(<ww>, <vv>).
+      -- New inverse Jacobian: <Jinv> = matrix_axpy(<Jinv> + <dJinv>).
+   -- Verify convergence once the loop is complete.
+-- Set simulation initial conditions:
+   -- Distribute <ss> across processors and load into <uin>.
+
+_______________________________________________________________________________
+
+
+-- Extract out the process of distributing a vector and loading it into <uin>.
+   -- The variable <nx> refers to the number of internal cells on the current
+      processor, not the total number of cells across the entire domain.
+      DUMSES assumes that <nx> is constant across all processors, so that the
+      total number of cells across the entire domain is <nx>*<nxslice>.
+-- Extract out the process of compiling a vector on the master processor from
+   its distributed components.
+-- Extract out the common function of distribute-hydro_onestep-recompile.

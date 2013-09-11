@@ -1,0 +1,63 @@
+&input for the heating layer
+
+&start_params
+     restart=0
+    ,tlim=200
+    ,verbose=.false. /
+
+&scheme_params
+     nx_glob=1600
+    ,ny_glob=800
+    ,nz_glob=1
+    ,riemann  ='hlld'
+    ,riemann2d='hlld'
+    ,slope_type=2
+    ,bval_in=2,1
+	 ,bval_out=2,1
+    ,courant=0.7 /
+
+&model_params
+     xmin= -12.56637061
+    ,xmax=  12.56637061
+    ,ymin= -6.283185307
+    ,ymax=  6.283185307  /
+
+&output_params
+    ,dthist= 1.d5
+    ,dtdump= 0.5d0
+	 ,dtspec= 1.d5 /
+
+&mpicon
+     nxslice=4
+    ,nyslice=1
+    ,nzslice=1 /
+
+&physics_params
+    Mup=0.1
+   ,Kheat=1.62d-2
+	,Kgrav=1.d0
+	,gamma=1.3333333333333333333333333333333d0
+	,amprand=1.d-7
+	,pert='rho'  
+	,spectrum='flat'
+	,nxmin=0
+	,nxmax=0
+	,nymin=1
+	,nymax=60
+	,pertseed=2 /
+
+!==============================================================
+!bval_type : boundary conditions types
+!	1 : periodic
+!	2 : zero gradient
+!	3 : shearing sheet
+!   4 : personalisé
+!riemann : Riemann solver used
+!	'lf'     : lax-fridrich
+!	'roe'    : athena Roe solver
+!	'hll'    : HLL solver
+!	'bouchut': Bouchut HLLC solver (3 waves)
+!restart :
+!	0 : initial problem
+!	1 : restart from restart file
+!=============================================================

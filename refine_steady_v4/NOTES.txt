@@ -1,0 +1,98 @@
+To avoid issues of guard cells on vectors but not on matrices, do the BG fill
+on the scatter instead of on the gather
+
+For cleaner logic, ISR_nx will be [nxslice*]nx*SS_nv, vectors will be truly 1D,
+and matrices will be truly 2D.  Gather and scatter will handle all the packing
+and unpacking.
+
+The ordering should be (1,1) (1,2) (1,3) (2,1) (2,2) (2,3) (3,1), etc; this
+localizes everything around the diagonal.  CHECK: Does this also make the
+allgather pack/unpack correctly?
+
+The Jacobian will be 15-diagonal (the diagonal and 7 diagonals on each side);
+write out a simple inversion algorithm to handle that particular structure.
+Something based on row-reduction will probably be sufficient for this purpose.
+Include checks for diagonal elements equal to zero.
+
+
+VECTOR:
+-------------------------------------------------------------------------------
+01 02 03 11 12 13 21 22 23 31 32 33 41 42 43 
+
+and on next processor:
+51 52 53 61 62 63 71 72 73 81 82 83 91 92 93 
+
+append:
+01 02 03 11 12 13 21 22 23 31 32 33 41 42 43 51 52 53 61 62 63 71 72 73 . . .
+
+This shows that with such a packing order, I can simply let the Allgather
+append things and that is the appropriate ordering of the components.  If I
+were to instead use variable-major (01 11 21 31 41 02 12 32 42 ...) then the
+Allgather would pack things incorrectly and I would have to reparse the output.
+
+Note that this storage order is the opposite of the storage order used by
+Fortran, which is variable-major.  Logically, I should probably switch idx and
+var in ss0, but that requires a lot of reworking.  For now, we'll just suffer
+the cache hits.
+
+The algorithm to pack a sub array
+   idx = 1..Nx (we are neglecting guard cells)
+   var = 1..Nv
+   vec[(idx-1)*Nv + var] = ss[idx,var]
+   allgather
+
+Unpacking the full array (accounting for xposition and 0/1-indexing):
+   some sample values:
+          0 1 1      1
+          0 1 V      V
+          0 X 1      (X-1)V+1
+          0 X V      (X-1)V+V = XV
+      (P-1) 1 1      (P-1)XV+1
+      (P-1) 1 V      (P-1)XV+V
+      (P-1) X 1      (P-1)XV+(X-1)V+1 = PXV-V+1
+      (P-1) X V      (P-1)XV+(X-1)V+V = PXV
+   therefore:
+      pos = 0..Np
+      idx = 1..Nx
+      var = 1..Nv
+      vec[pos*Nx*Nv + (idx-1)*Nv + var] = vec[(pos*Nx + idx-1)*Nv + var]
+      if I = pos*Nx*Nv + (idx-1)*Nv + var then
+         var = I % Nv
+         I'  = (I - var) / Nv
+         idx = (I' % Nx) + 1
+         pos = (I' - (idx-1)) / Nx
+
+
+MATRIX:
+-------------------------------------------------------------------------------
+1111 1211 1311 2111 2211 2311 3111 3211 3311 4111 4211 4311 5111 5211 5311 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00   00   00   00
+1112 1212 1312 2112 2212 2312 3112 3212 3312 4112 4212 4312 5112 5212 5312 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00   00   00   00
+1113 1213 1313 2113 2213 2313 3113 3213 3313 4113 4213 4313 5113 5213 5313 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00   00   00   00
+1121 1221 1321 2121 2221 2321 3121 3221 3321 4121 4221 4321 5121 5221 5321 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00
+1122 1222 1322 2122 2222 2322 3122 3222 3322 4122 4222 4322 5122 5222 5322 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00
+1123 1223 1323 2123 2223 2323 3123 3223 3323 4123 4223 4323 5123 5223 5323 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   00   00   00
+1131 1231 1331 2131 2231 2331 3131 3231 3331 4131 4231 4331 5131 5231 5331 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1132 1232 1332 2132 2232 2332 3132 3232 3332 4132 4232 4332 5132 5232 5332 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1133 1233 1333 2133 2233 2333 3133 3233 3333 4133 4233 4333 5133 5233 5333 
+ XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1141 1241 1341 2141 2241 2341 3141 3241 3341 4141 4241 4341 5141 5241 5341 
+ 00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1142 1242 1342 2142 2242 2342 3142 3242 3342 4142 4242 4342 5142 5242 5342 
+ 00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1143 1243 1343 2143 2243 2343 3143 3243 3343 4143 4243 4343 5143 5243 5343 
+ 00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1151 1251 1351 2151 2251 2351 3151 3251 3351 4151 4251 4351 5151 5251 5351 
+ 00   00   00   00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1152 1252 1352 2152 2252 2352 3152 3252 3352 4152 4252 4352 5152 5252 5352 
+ 00   00   00   00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX
+1153 1253 1353 2153 2253 2353 3153 3253 3353 4153 4253 4353 5153 5253 5353 
+ 00   00   00   00   00   00   XX   XX   XX   XX   XX   XX   XX   XX   XX
+

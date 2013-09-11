@@ -1,0 +1,2 @@
+This is a branch off of heating_layer_v04 (on 06/28), with the difference being
+that H is adjustible.
