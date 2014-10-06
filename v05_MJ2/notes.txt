@@ -1,0 +1,42 @@
+TODO : Check all the equations that Jerome coded up, as he assumed dens_up and
+csnd_up are unity, while I am having them as hard-coded parameters (for
+flexibility in case I decided to make them runtime parameters later, and also
+for clarity to make sure my equations make sense and not have missing terms).
+
+What is the difference between condinit and user_init?
+
+Why does init_geom come after condinit, bval, and restart?  Can I move it in
+front of condinit?  That way I can do the refinement in condinit and simply
+ignore user_init.
+
+I need to put an "if(restart)" type clause into condinit.
+
+I want to split into several modules:
+(1) Buoyant layer:
+    - This contains the information from the buoyant layer, such as Kheat,
+      Kgrav, layer_width, layer_shape.
+    - This also contains shape_function, give_grav, and give_cool.
+(2) The steady state:
+    - This contains the runtime parameters for the background flow (mach_up)
+      and the related variables (dens_up, csnd_up).
+    - This also contains the storage for the steady state (the ss0 array, the
+      number of variables in the steady state, and the steady state indices).
+    - This contains the routines necessary for constructing the steady state,
+      including the construction subroutine itself, as well as supporting
+      subroutines such as the Runge-Kutta stuff that Jerome coded up.
+    - This also constains the routine for writing the steady state to a file.
+      This should be based on the improved version in refine_steady_v4, which
+      loops through the processors with yposition and zposition equal to zero
+      in order by xposition to print the entire steady state cleanly in a
+      single file.
+(3) The perturbation:
+    - This contains the runtime parameters for the perturbation.
+    - This also contains any useful support variables for the perturbation (for
+      example, this may include the Fourier phases).
+    - This contains all the routines necessary to compute and apply the
+      perturbations (including, for example, Jerome's random number generator).
+(4) The refinement iteration scheme:
+    - I don't plan to code this up now.  I have some ideas for how to construct
+      a good method for this, but what I don't currently have is the time to
+      work on it and develop a method that (a) works and (b) is efficient.
+

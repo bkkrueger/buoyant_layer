@@ -1,0 +1,138 @@
+# Define environment variable DUMSES_ARCH to reflect your architecture
+# For example: export DUMSES_ARCH=INTEL for INTEL compiler
+# Possible choice are: undefined, INTEL, MACOSX, COAST, PGF90, INTEL_TITANE, 
+# INTEL_GRAPHI, TURING
+DUMSES_ARCH=CURIE
+#############################################################################
+# Compilation time parameters
+NDIM     = 3
+WITHMPI  = 1
+HDF5     = 1
+PARAHDF5 = 1
+PNETCDF  = 0
+ISO      = 0	# isthermal mode --- skip the energy equation
+#############################################################################
+PATCH = ../patch/buoyant_layer/v05_MJ2
+PATCHOBJ = buoyant.o steady.o perturb.o comm.o
+#############################################################################
+
+ifeq ($(HDF5),1)
+ifeq ($(PNETCDF),1)
+$(error You cannot use both HDF5 and ParallelNetCDF)
+endif
+endif
+
+#
+# Default (gfortran, nompi, nohdf5)
+#-------------------------------------
+F90_      = gfortran
+LIBS_     = 
+PARALIBS_ =
+CPPFLAGS_ = -x f95-cpp-input -DSYSTEM
+FFLAGS_   = -ffast-math -fdefault-real-8 -ffree-line-length-0 -O3
+HDFINC_   = 
+HDFLIB_   =
+
+# Fortran compilers MACOSX (with gfortran)
+#-------------------------------------
+F90_MACOSX  = mpif90
+CPPFLAGS_MACOSX = -x f95-cpp-input -DSYSTEM
+FFLAGS_MACOSX = -ffast-math -fdefault-real-8 -fdefault-double-8 -ffree-line-length-0 -O3
+HDFINC_MACOSX = -I/Users/bkrueger/utils/hdf5/HDF5-1.8.10-fortran8/include/
+HDFLIB_MACOSX = -L/Users/bkrueger/utils/hdf5/HDF5-1.8.10-fortran8/lib -lhdf5 -lhdf5_fortran
+
+# COAST machine 132.166.28.215 (gfortran with MPI & HDF5)
+#-------------------------------------
+#F90_COAST  = /home/users/mnt/mjoos/soft/phdf5/bin/h5pfc
+F90_COAST  = /gpfs/data1/sfromang/usr/hdf5/bin/h5fc
+LIBS_COAST = 
+MPIINC_COAST = -I/usr/mpi/gcc/openmpi-1.4.3/include/
+MPILIB_COAST = -L/usr/mpi/gcc/openmpi-1.4.3/lib64 -lmpi -lmpi_f77
+CPPFLAGS_COAST = -x f95-cpp-input -DSYSTEM
+FFLAGS_COAST = -ffast-math -fdefault-real-8 -ffree-line-length-0 -O3
+#HDFINC_COAST = -I/home/users/mnt/mjoos/soft/phdf5/include
+#HDFLIB_COAST = -L/home/users/mnt/mjoos/soft/phdf5/lib -lhdf5 -lhdf5_fortran
+HDFINC_COAST = -I/gpfs/data1/sfromang/usr/hdf5/include
+HDFLIB_COAST = -L/gpfs/data1/sfromang/usr/hdf5/lib -lhdf5 -lhdf5_fortran
+CDFINC_COAST = -I/gpfs/data1/sfromang/usr/pnetcdf-1.3.1/include
+CDFLIB_COAST = -L/gpfs/data1/sfromang/usr/pnetcdf-1.3.1/lib -lpnetcdf
+
+# CURIE
+#-------------------------------------
+ifeq ($(PARAHDF5),1)
+F90_CURIE = h5pfc
+else
+F90_CURIE = mpif90
+endif
+LIBS_CURIE = 
+CPPFLAGS_CURIE = -DSYSTEM -fpp
+MPILIB_CURIE = -lmpi
+FFLAGS_CURIE = -fpp -r8 -O3
+ifeq ($(HDF5),1)
+HDFINC_CURIE = -I$(HDF5_INCDIR)
+HDFLIB_CURIE = $(HDF5_LDFLAGS) -lhdf5_fortran
+endif
+
+#
+#
+#
+#--------------- No changes needed after this line --------------------
+#
+#
+#
+
+F90      =$(F90_$(DUMSES_ARCH))
+LIBS     =$(LIBS_$(DUMSES_ARCH))
+CPPFLAGS =$(CPPFLAGS_$(DUMSES_ARCH))
+ifeq ($(DUMSES_ARCH),TURING)
+PHYFLAGS = -WF,-DNDIM=$(NDIM),-DISO=$(ISO),-DWITHMPI=$(WITHMPI),-DHDF5=$(HDF5),-DPARAHDF5=$(PARAHDF5),-DPNETCDF=$(PNETCDF),-DBLUEGENE=1
+else
+PHYFLAGS = -DNDIM=$(NDIM) -DISO=$(ISO) -DWITHMPI=$(WITHMPI) -DHDF5=$(HDF5) -DPARAHDF5=$(PARAHDF5) -DPNETCDF=$(PNETCDF)
+endif
+HDFINC = $(HDFINC_$(DUMSES_ARCH))
+HDFLIB = $(HDFLIB_$(DUMSES_ARCH))
+CDFINC = $(CDFINC_$(DUMSES_ARCH))
+CDFLIB = $(CDFLIB_$(DUMSES_ARCH))
+ifeq ($(WITHMPI),1)
+MPILIB = $(MPILIB_$(DUMSES_ARCH))
+FLAGS = $(FFLAGS_$(DUMSES_ARCH)) $(PHYFLAGS) $(MPIINC_$(DUMSES_ARCH))
+else
+MPILIB = 
+FLAGS =$(FFLAGS_$(DUMSES_ARCH)) $(PHYFLAGS)
+endif
+
+#############################################################################
+# Source directory
+VPATH=$(PATCH):../mpi:../src:../output
+#############################################################################
+#INC    = -I/opt/local/include/
+#LIB    = -I/opt/local/include/ -L/opt/local/lib/
+#############################################################################
+# All objects
+MPI_MODULEOBJ = mpi_var.o
+MPIOBJ        = bvalx.o bvaly.o bvalz.o compute_y_inout_all.o \
+	        grid_struct.o init_mpi.o finalize_mpi.o mpi_param.o vol_average.o
+
+MODULEOBJ = amr_parameters.o hydro_parameters.o hydro_commons.o variables.o \
+	   rdwrt_h5.o
+MHDOBJ = condinit.o restart_run.o init.o trace.o exact.o dissip.o viscosity.o \
+	resistivity.o source_term.o compute_dt.o bval.o bval_shear.o \
+	output.o history.o compute_yz_mean.o update.o godunov_utils.o \
+	ctoprim.o umuscl.o boundana.o dumses.o special.o user_init.o \
+	fargo_update.o ct.o
+
+ifeq ($(WITHMPI),1)
+ALLOBJ = $(MPI_MODULEOBJ) $(MODULEOBJ) $(PATCHOBJ) $(MHDOBJ) $(MPIOBJ)
+else
+ALLOBJ = $(MODULEOBJ) $(PATCHOBJ) $(MHDOBJ)
+endif
+#############################################################################
+%.o : %.f90
+	$(F90) $(HDFINC) $(CDFINC) $(FLAGS) $(CPPFLAGS) -c $^ -o $@
+#############################################################################
+dumses: $(ALLOBJ) 
+	$(F90) $(FLAGS) -o ./dumses $(ALLOBJ) $(HDFLIB) $(CDFLIB) $(LIBS) $(MPILIB)
+#############################################################################
+clean:
+	rm *.o *.mod 
+#############################################################################

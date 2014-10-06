@@ -1,0 +1,61 @@
+&input for the heating layer
+
+! Advection time across the buoyant layer :  45.269s
+
+&start_params
+    restart = 0
+   ,tlim    = 2.0001d2
+   ,verbose = .false. /
+
+&scheme_params
+    nx_glob    = 1152
+   ,ny_glob    = 384
+   ,nz_glob    = 1
+   ,riemann    = 'hlld'
+   ,riemann2d  = 'hlld'
+   ,slope_type = 2
+   ,bval_in    = 4,1
+   ,bval_out   = 4,1
+   ,courant    = 0.7 /
+
+&model_params
+    xmin = -9.0d0
+   ,xmax =  9.0d0
+   ,ymin = -3.0d0
+   ,ymax =  3.0d0 /
+
+! dtdump set to get 101 outputs (0..100) within tlim
+&output_params
+    dthist = 1.0d5
+   ,dtdump = 2.50d0
+   ,dtspec = 1.0d5 /
+
+&mpicon
+    nxslice = 12
+   ,nyslice = 4
+   ,nzslice = 1 /
+
+&physics_params
+    mach_up          = 0.3d0
+   ,gamma            = 1.3333333333333333333333333333333d0 /
+
+&buoyant_params
+    Kheat            = 1.2d-2
+   ,Kgrav            = 3.0d0
+   ,layer_shape      = 'trapezoid'
+   ,layer_limit      = 1.0d0 /
+
+&perturb_params
+    pert_type       = 'fourier'
+   ,pert_amplitude  = 1.0e-6
+   ,amp_min         = 1.0e-14
+   ,pert            = 'rho'
+   ,spectrum        = 'flat'
+   ,pertseed        = 2
+   ,xpmin           = -0.75d0
+   ,xpmax           =  0.75d0
+   ,nxmin           = 0
+   ,nxmax           = 0
+   ,nymin           = 1
+   ,nymax           = 20 /
+
