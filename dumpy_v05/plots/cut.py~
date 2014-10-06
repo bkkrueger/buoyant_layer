@@ -1,0 +1,537 @@
+from pylab import *
+import numpy as np
+import os as os
+import pickle
+
+from dumpy.data import rd_dumses
+from dumpy.plots import snapshots
+
+def xprofile(data,nvar=8,type='rho',thick=1.0,save=0,scale=1):
+
+    #Get radial cut
+    #xcut=data.get_slice_x(type)
+    xcut=data.get_yz_mean()
+
+    #Plot data
+    rcParams['image.origin']='lower'
+    xlabel('Radius')
+    ylabel(type)
+    plot(data.x,xcut)
+
+    if save==1:
+	savefig('rprofile.eps')
+
+    return
+
+def alpha_profile(data,save=0):
+
+    #Get alpha radial profile
+    x,alpha=GetAlpha(data)
+
+    plot(x,alpha)
+    xlabel('Radius')
+    ylabel('alpha')
+
+    if save==1:
+	savefig('alpha.eps')
+
+    return
+
+def GetAlpha(data,q=0,c0=0.057735027):
+    """ Compute alpha profile from Dumses output"""
+    
+    #Get dimensions
+    nx,ny,nz,dim=shape(data.B)
+    
+    ciso=np.zeros(nx)
+    ciso2=c0**2/data.x**q
+
+    alpha_max=-yz_mean(data.B[:,:,:,0]*data.B[:,:,:,1])/yz_mean(data.rho[:,:,:])/ciso2
+    vymean=yz_mean(data.rhou[:,:,:,1])/yz_mean(data.rho)
+    dvy=data.rhou[:,:,:,1]/data.rho
+    for i in range(nx):
+        dvy[i,:,:]=dvy[i,:,:]-vymean[i]
+    alpha_rey=yz_mean(data.rhou[:,:,:,0]*dvy)/yz_mean(data.rho[:,:,:])/ciso2
+
+    alpha=alpha_max+alpha_rey
+
+    return data.x,alpha_rey
+
+def MeanAlpha(istart,istop,save=0):
+    "Compute alpha radial profile averaged between output istart and istop"
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        x,rd_alpha=GetAlpha(data)
+        if (i==istart):
+            alpha=rd_alpha
+        alpha=(rd_alpha+alpha*(i-istart))/(i-istart+1)
+
+    plot(x,alpha)
+    xlabel('Radius')
+    ylabel('alpha')
+
+    if save==1:
+	savefig('mean_alpha.eps')
+    if save==2:
+        file=open('alpha.txt','w')
+        for i in range(shape(x)[0]):
+            chaine=str(x[i])+' '+str(alpha[i])+'\n'
+            file.write(chaine)
+        file.close()
+
+    return
+
+def GetMeanField1d(filename="2d_avg_snapshot.pic",p=0):
+
+    f=file(filename,'rb')
+    x      =pickle.load(f)
+    y      =pickle.load(f)
+    field  =pickle.load(f)
+    f.close()
+
+    field1D=np.mean(field,1)
+
+    plot(x,field1D*x**p)
+    xlabel('Radius')
+    ylabel('Surface Density')
+
+def MeanDensity(istart,istop,save=1,p=0.):
+    "Compute mean gas surface density averaged between istart and istop"
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        x=data.x ; rd_rho=yz_mean(data.rho)
+        if (i==istart):
+            rho=rd_rho
+        rho=(rd_rho+rho*(i-istart))/(i-istart+1)
+
+    plot(x,rho*x**p)
+    xlabel('Radius')
+    ylabel('Surface Density')
+
+#    x100=1.+7.*arange(100)/100.
+#    plot(x100,1./x100**0.5)
+#    ylim(0.,1.5)
+
+    if save==1:
+	savefig('mean_density.eps')
+    if save==2:
+        file=open('surf_dens.txt','w')
+        for i in range(shape(x)[0]):
+            chaine=str(x[i])+' '+str(rho[i])+'\n'
+            file.write(chaine)
+        file.close()
+
+    return
+
+def MeanDensity2D(istart,istop,save=1):
+    "Compute mean gas surface density averaged between istart and istop"
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        x=data.x ; y=data.y ; rd_rho=z_mean(data.rho)
+        if (i==istart):
+            rho=rd_rho
+        rho=(rd_rho+rho*(i-istart))/(i-istart+1)
+
+    xmin=1. ; xmax=8.
+    ymin=0. ; ymax=pi
+
+    rcParams['image.origin']='lower'
+    hot()
+    xlabel('Phi') ; ylabel('R')
+    imshow(transpose(rho),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    if save==1:
+	savefig('mean_density.eps')
+    if save==2:
+	savefig('mean_density.eps')
+        f=file('2d_avg_snapshot.pic','wb')
+        pickle.dump(x,f)
+        pickle.dump(y,f)
+        pickle.dump(rho,f)
+        f.close()
+
+    return
+
+def MeanBy2D(istart,istop,save=1):
+    "Compute 2D mean By averaged between istart and istop"
+
+    xmin=1. ; xmax=8.
+    ymin=0. ; ymax=pi
+
+    rcParams['image.origin']='lower'
+    hot()
+    xlabel('Phi') ; ylabel('R')
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        x=data.x ; y=data.y
+#        rd_rho=z_mean(data.B[:,:,:,1])
+#        rd_rho=z_mean(data.B[:,:,:,1]*data.B[:,:,:,1])**0.5
+#        bymean=z_mean(data.B[:,:,:,1])
+#        bymean_3d=data.B[:,:,:,1]
+#        for k in range(shape(data.B)[2]):
+#            bymean_3d[:,:,k]=bymean
+#        rd_rho=(z_mean((data.B[:,:,:,1]-bymean_3d)*(data.B[:,:,:,1]-bymean_3d)))**0.5
+        rd_rho=(z_mean(data.B[:,:,:,1]*data.B[:,:,:,1])-(z_mean(data.B[:,:,:,1]))**2)**0.5
+        if (i==istart):
+            rho=rd_rho
+        rho=(rd_rho+rho*(i-istart))/(i-istart+1)
+        imshow(transpose(rho),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+        draw()
+
+    imshow(transpose(rho),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    if save==1:
+	savefig('mean_by.eps')
+    if save==2:
+	savefig('mean_by2.eps')
+        f=file('2d_avg_snapshot_by2.pic','wb')
+        pickle.dump(x,f)
+        pickle.dump(y,f)
+        pickle.dump(rho,f)
+        f.close()
+
+    return
+
+def GetMeanField2d(filename="2d_avg_snapshot.pic",zoom=0):
+
+    f=file(filename,'rb')
+    x      =pickle.load(f)
+    y      =pickle.load(f)
+    field  =pickle.load(f)
+    f.close()
+
+    xmin=min(x) ; xmax=max(x)
+    ymin=min(y) ; ymax=max(y) 
+    rcParams['image.origin']='lower'
+    hot()
+    ylabel('Phi') ; xlabel('R')
+    if zoom==0:
+        imshow(transpose(field),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    if zoom==1:
+        xmin=x[60] ; xmax=x[130]
+        ymin=y[210] ; ymax=y[270] 
+        imshow(transpose(field[60:130,210:270]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+
+def GetMeanDensity2d(filename="2d_avg_snapshot.txt",idump=20,p=0.):
+
+    f=file('2d_avg_snapshot.pic','rb')
+    x    =pickle.load(f)
+    y    =pickle.load(f)
+    rho  =pickle.load(f)
+    f.close()
+
+    figure(1)
+    xmin=x[60] ; xmax=x[130]
+    ymin=y[210] ; ymax=y[270] 
+    rcParams['image.origin']='lower'
+    hot()
+    ylabel('Phi') ; xlabel('R')
+    imshow(transpose(rho[60:130,210:270]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    os.chdir('../../hydro_320_480_2_pi_q0_p1.5/nu0_newsurf/')
+    data=rd_dumses.DumsesData(idump)
+
+    figure(2)
+    ylabel('Phi') ; xlabel('R')
+    imshow(transpose(data.rho[60:130,210:270,0]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    figure(3)
+    ylabel('Phi') ; xlabel('R')
+    imshow(transpose(rho-data.rho[:,:,0]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+    
+    os.chdir('../../beta400_320_480_40_pi_q0_p1.5/wplanet/')
+    #os.chdir('../../beta400_320_480_40_pi_q1/wplanet/')
+
+    figure(4)
+    plot(data.x,np.mean(data.rho[:,:,0],1)*data.x**p,color='b')
+    plot(data.x,np.mean(rho,1)*data.x**p,color='r')
+
+    figure(5) ; p=0.5
+    os.chdir('../../beta400_320_480_40_pi_q1/wplanet/')
+    f=file('2d_avg_snapshot.pic','rb')
+    x    =pickle.load(f)
+    y    =pickle.load(f)
+    rho  =pickle.load(f)
+    f.close()
+    os.chdir('../../hydro_320_480_4_wpl_pi_q1/nu0_newsurf/')
+    data=rd_dumses.DumsesData(50)
+    plot(data.x,np.mean(data.rho[:,:,0],1)*data.x**p,color='b')
+    plot(data.x,np.mean(rho,1)*data.x**p,color='r')
+
+    figure(6)
+    ylabel('Phi') ; xlabel('R')
+    imshow(transpose(rho[60:130,210:270]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    figure(7)
+    ylabel('Phi') ; xlabel('R')
+    imshow(transpose(data.rho[60:130,210:270,0]),aspect='auto',extent=(xmin,xmax,ymin,ymax))
+    colorbar()
+
+    os.chdir('../../beta400_320_480_40_pi_q0_p1.5/wplanet/')
+
+    return
+
+def MeanBy(istart,istop,save=1,color='r'):
+    "Compute mean By averaged between istart and istop"
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        x=data.x ; rd_by=yz_mean(data.B[:,:,:,1])
+        if (i==istart):
+            by=rd_by
+        by=(rd_by+by*(i-istart))/(i-istart+1)
+
+    plot(x,by,color)
+    xlabel('Radius')
+    ylabel('By')
+
+    if save==1:
+	savefig('mean_density.eps')
+
+    return
+
+def ubAngle(istart,istop,Lz=10,binWidth=0.5):
+    "Compute angle between mean velocity and magnetic field"
+
+    Nbin=int(Lz/binWidth)
+    meanAbsTheta=zeros(Nbin)
+    zBin=binWidth/2.+arange(-Nbin/2,Nbin/2)*binWidth ; left=arange(-Nbin/2,Nbin/2)*binWidth
+
+    for ifile in range(istart,istop+1):
+        print "Reading file number ",ifile," ..."
+        data=rd_dumses.DumsesData(ifile)
+        print "  File number ",ifile," read."
+
+        bx=xy_mean(data.B[:,:,:,0])
+        by=xy_mean(data.B[:,:,:,1])
+        vx=xy_mean(data.rhou[:,:,:,0]/data.rho[:,:,:])
+        vy=xy_mean(data.rhou[:,:,:,1]/data.rho[:,:,:])
+        
+        v=sqrt(vx*vx+vy*vy)
+        b=sqrt(bx*bx+by*by)
+
+        cosTheta=(bx*vx+by*vy)/v/b
+        sinTheta=(vx*by-vy*bx)#/v/b
+
+        #figure(1)
+        #plot(data.z,bx)
+        #plot(data.z,by)
+        #figure(2)
+        #plot(data.z,vx)
+        #plot(data.z,vy)
+        #plot(data.z,data.B[0,0,:,0])
+        #stop
+
+        theta=np.arccos(cosTheta)
+
+        nz=shape(data.z)[0]
+        for k in range(nz):
+            if sinTheta[k]<0:
+                theta[k]=-theta[k]
+
+        for ibin in range(Nbin):
+            kmin=where(data.z>(-Nbin/2.+ibin)*binWidth)[0][0]
+            if ibin<Nbin-1:
+                kmax=where(data.z>(-Nbin/2.+ibin+1)*binWidth)[0][0]
+            else:
+                kmax=nz
+            meanAbsTheta[ibin]=meanAbsTheta[ibin]*(ifile-istart)+abs(np.mean(theta[kmin:kmax]))
+            meanAbsTheta[ibin]=meanAbsTheta[ibin]/(ifile-istart+1)
+
+        if ifile==istart:
+            meanTheta=theta
+
+        meanTheta=(theta + meanTheta*(ifile-istart))/(ifile-istart+1)
+
+    figure(1)
+    plot(data.z,meanTheta)
+    figure(2)
+    #plot(zBin,meanAbsTheta,'ro')
+    bar(left,meanAbsTheta,width=binWidth,color='b')
+    ylim(0,2.) ; xlim(-5,5)
+    xlabel('Z/H') ; ylabel('Angle')
+    #plot(data.z,cosTheta)
+    #figure(4)
+    #plot(data.z,v*b)
+    #plot(data.z,sinTheta)
+
+
+def byVertStruct(istart,istop,save=0,color='r'):
+    "Compute horizontally and time averaged mean By and fluctuations"
+
+    filename='betaOne.pickle'
+    if os.path.isfile(filename):
+        f=file(filename,'ab')
+    else:
+        f=file(filename,'wb')
+
+    matplotlib.rc('text', usetex=True)
+    matplotlib.rcParams['font.size']=16
+    rho0=1. ; c0sq=1.e-6 ; Pth=rho0*c0sq
+
+    for i in range(istart,istop+1):
+        print i
+        data=rd_dumses.DumsesData(i)
+        mBy  =xy_mean(data.B[:,:,:,1])
+        dBy2 =xy_mean(data.B[:,:,:,1]**2)
+        mBeta=2.*xy_mean(data.rho)*c0sq/xy_mean(data.B[:,:,:,0]**2+data.B[:,:,:,1]**2+data.B[:,:,:,2]**2)
+        if (i==istart):
+            meanBy2 =mBy**2
+            deltaBy2=dBy2-mBy**2
+            meanBeta=mBeta
+            zmid=np.int(shape(mBeta)[0]/2.)
+
+        zbottom,ztop=getBetaOne(mBeta,data.z,zmid)
+        pickle.dump((data.time,zbottom,ztop),f)
+
+        meanBy2 =( mBy**2      + meanBy2*(i-istart))/(i-istart+1)
+        deltaBy2=((dBy2-mBy**2)+deltaBy2*(i-istart))/(i-istart+1)
+        meanBeta=(mBeta        +meanBeta*(i-istart))/(i-istart+1)
+
+    f.close()
+
+    figure(1)
+    semilogy(data.z, meanBy2/Pth,'r',linewidth=2.)
+    semilogy(data.z,deltaBy2/Pth,'b',linewidth=2.)
+    xlabel('Z/H')
+    ylabel('$<$By$>$$^2$,dBy$^2$')
+
+    figure(2)
+    semilogy(data.z, sqrt(meanBy2/deltaBy2),linewidth=2.)
+    xlabel('Z/H')
+    ylabel('$<$By$>$/dBy')
+
+    figure(3)
+    semilogy(data.z,meanBeta,linewidth=2.)
+    xlabel('Z/H')
+    ylabel('beta')
+
+    if save==1:
+	savefig('byStruct.eps')
+
+    return
+
+def getBetaOne(array,z,zstart):
+    "Find location in disk where beta=1"
+
+    zTop=zstart ; zBottom=zstart ; zMax=zstart*2
+    while ((array[zTop]>1.) and (zTop<zMax-1)):
+        zTop=zTop+1
+    while ((array[zBottom]>1.) and (zBottom>1.)):
+        zBottom=zBottom-1
+
+    return z[zBottom],z[zTop]
+
+def readBetaOne(filename):
+    "Read pickle file containing beta=1 locations"
+
+    time=[] ; zBottom=[] ; zTop=[]
+
+    f=open(filename,'r')
+    eOf=False
+    while not(eOf):
+        try:
+            toto=pickle.load(f)
+        except:
+            print 'End of File reached.'
+            f.close()
+            eOf=True
+        else:
+            time.append(toto[0])
+            zBottom.append(toto[1])
+            zTop.append(toto[2])
+
+    return time,zBottom,zTop
+
+def xy_mean(array3d):
+    "Compute averages along 1st and 2nd dimension of a 3D array"
+
+    mean_data=np.mean(np.mean(array3d,0),0)
+    return mean_data
+
+def yz_mean(array3d):
+    "Compute averages along 2nd and 3rd dimension of a 3D array"
+
+    mean_data=np.mean(np.mean(array3d,1),1)
+    return mean_data
+
+def z_mean(array3d):
+    "Compute averages along 3rd dimension of a 3D array"
+
+    mean_data=np.mean(array3d,2)
+    return mean_data
+
+def plt_mean(data0,data55,data41):
+
+    by0 =yz_mean(data0.B[:,:,:,1])
+    by55=yz_mean(data55.B[:,:,:,1])
+    by41=yz_mean(data41.B[:,:,:,1])
+
+    figure(1)
+
+    plot(data0.x,by0,'r')
+    plot(data55.x,by55,'b')
+    plot(data41.x,by41,'g')
+
+    xlabel('R') ; ylabel('Mean Bphi')
+
+    plot([2.5,3],[0.045,0.045],'r')
+    plot([2.5,3],[0.04,0.04],'b')
+    plot([2.5,3],[0.035,0.035],'g')
+
+    text(3.25,0.044,'Initial Bphi')
+    text(3.25,0.039,'t=55, w/o resistivity, no flux redistrib')
+    text(3.25,0.034,'t=41, resistivity, flux redistrib')
+
+    savefig('mean_bphi.eps')
+    
+    figure(2)
+
+    plot(data55.x,np.cumsum(by55)/np.max(np.cumsum(by55)),'b')
+    plot(data41.x,np.cumsum(by41)/np.max(np.cumsum(by41)),'g')
+    xlabel('R') ; ylabel('Cumulative Mean Bphi')
+
+    plot([3,3.5],[0.1,0.1],'b')
+    plot([3,3.5],[0.2,0.2],'g')
+
+    text(3.75,0.08,'t=55, w/o resistivity, no flux redistrib')
+    text(3.75,0.18,'t=41, resistivity, flux redistrib')
+
+    savefig('cum_mean_bphi.eps')
+
+    return
+
+def plt_mean_II():
+
+    MeanBy(0,0,color='r')
+    MeanBy(38,41,color='r')
+
+    plot([4,4.5],[0.01,0.01],'r')
+    plot([4,4.5],[0.011,0.011],'b')
+
+    text(4.75,0.0098,'beta=50, t=0, 38<t<41')
+    text(4.75,0.0108,'beta=400, t=0, 57<t<60')
+
+    os.chdir('../beta400_320_240_40_piover2/')
+
+    MeanBy(0,0,color='b')
+    MeanBy(57,60,color='b')
+
+    os.chdir('../beta50_320_240_40_piover2/')

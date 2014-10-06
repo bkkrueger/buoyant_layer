@@ -1,0 +1,433 @@
+import tables
+import numpy as np
+
+from dumpy.utils.utils import *
+
+class DumsesData:
+
+    def __init__(self,idump=1,filedir='./',nvar=8,nbuf=3,bin=False,collective=False):
+
+        #Read data from file
+        if collective:
+            data=DumsesDataCollective(idump=idump,filedir='./',nvar=nvar,nbuf=nbuf,bin=bin)
+        else:
+            data=DumsesDataNoCollective(idump=idump,filedir='./',nvar=nvar,nbuf=nbuf,bin=bin)
+
+        #Define output data
+        self.time=data.time
+
+        #Define output arrays
+        self.rho=data.rho
+        self.rhou=data.rhou
+        self.E=data.E
+        self.B=data.B
+
+    def get_1d_y(self,type='rho'):
+        if type=='rho':
+            slice=self.rho[0,:,0]
+        elif type=='vx':
+            slice=self.rhou[0,:,0,0]/self.rho[0,:,0]
+        elif type=='vy':
+            slice=self.rhou[0,:,0,1]/self.rho[0,:,0]
+        elif type=='vz':
+            slice=self.rhou[0,:,0,2]/self.rho[0,:,0]
+        elif type=='bx':
+            slice=self.B[0,:,0,0]
+        elif type=='by':
+            slice=self.B[0,:,0,1]
+        elif type=='bz':
+            slice=self.B[0,:,0,2]#/self.B[0,:,0,1]
+        return slice
+                        
+    def get_2d_xy(self,type='rho'):
+        if type=='rho':
+            slice=self.rho[:,:,0]
+        elif type=='vx':
+            slice=self.rhou[:,:,0,0]/self.rho[:,:,0]
+        elif type=='vy':
+            slice=self.rhou[:,:,0,1]/self.rho[:,:,0]
+        elif type=='vz':
+            slice=self.rhou[:,:,0,2]/self.rho[:,:,0]
+        elif type=='bx':
+            slice=self.B[:,:,0,0]
+        elif type=='by':
+            slice=self.B[:,:,0,1]
+        elif type=='bz':
+            slice=self.B[:,:,0,2]
+        return slice
+                        
+    def get_2d_xz(self,type='rho'):
+        if type=='rho':
+            slice=self.rho[:,0,:]
+        elif type=='vx':
+            slice=self.rhou[:,0,:,0]/self.rho[:,0,:]
+        elif type=='vy':
+            slice=self.rhou[:,0,:,1]/self.rho[:,0,:]
+        elif type=='vz':
+            slice=self.rhou[:,0,:,2]/self.rho[:,0,:]
+        elif type=='bx':
+            slice=self.B[:,0,:,0]
+        elif type=='by':
+            slice=self.B[:,0,:,1]
+        elif type=='bz':
+            slice=self.B[:,0,:,2]
+        return slice
+                        
+    def get_2d_yz(self,type='rho'):
+        if type=='rho':
+            slice=self.rho[0,:,:]
+        elif type=='vx':
+            slice=self.rhou[0,:,:,0]/self.rho[0,:,:]
+        elif type=='vy':
+            slice=self.rhou[0,:,:,1]/self.rho[0,:,:]
+        elif type=='vz':
+            slice=self.rhou[0,:,:,2]/self.rho[0,:,:]
+        elif type=='bx':
+            slice=self.B[0,:,:,0]
+        elif type=='by':
+            slice=self.B[0,:,:,1]
+        elif type=='bz':
+            slice=self.B[0,:,:,2]
+        return slice
+                        
+    def get_yz_mean(self):
+
+        mean_data=np.mean(np.mean(self.rho,1),1)
+        return mean_data
+
+    def get_rho_rhd(self,gamma=5./3.):
+        (nx,ny,nz)=self.rho.shape
+        rho=np.zeros((nx,ny,nz))
+        for k in range(nz):
+            for j in range(ny):
+                for i in range(nx):
+                    M=self.rhou[i,j,k,0]**2+self.rhou[i,j,k,1]**2+self.rhou[i,j,k,2]**2
+                    M=np.sqrt(M)
+                    if M==0:
+                        rho[i,j,k]=self.rho[i,j,k]
+                    else:
+                        D=self.rho[i,j,k] ; E=self.E[i,j,k]
+                        factor=(gamma-1)**2*(M**2+D**2)
+                        b1 = -2*gamma*(gamma-1)*M*E                            /factor
+                        b2 = (gamma**2*E**2+2*(gamma-1)*M**2-(gamma-1)**2*D**2)/factor
+                        b3 = -(2*gamma*M*E)                                    /factor
+                        b4 = M**2                                              /factor
+                        
+                        v=GetRoot(b1,b2,b3,b4)
+                        lor=np.sqrt(1-v**2)
+                        rho[i,j,k]=self.rho[i,j,k]*lor
+         
+        return rho
+
+class DumsesDataCollective:
+
+    def __init__(self,idump=1,filedir='./',nvar=8,nbuf=3,bin=False):
+
+        #Dump directory name
+        dir=filedir+'output_'+str_suffix(idump)+'/'
+
+        #Read first output to get basic info
+        filename=dir+'slices.000000'
+        data=DumsesFile_h5_Collective(filename)
+
+        [nxslice,nyslice,nzslice]=data.slice
+        [nxglob,nyglob,nzglob]   =data.dim_glob
+        ndim=1
+        if (nyglob>1):
+            ndim=2
+            if (nzglob>1):
+                ndim=3
+        nx=nxglob/nxslice ; ny=nyglob/nyslice ; nz=nzglob/nzslice
+        npes=nxslice*nyslice*nzslice
+        
+        self.time=data.time
+
+        #Define output arrays
+        #self.x   =np.zeros(nxglob)
+        #self.y   =np.zeros(nyglob)
+        #self.z   =np.zeros(nzglob)
+        self.rho =data.rho
+        self.rhou=data.rhou
+        self.E   =data.E
+        self.B   =data.B
+
+class DumsesDataNoCollective:
+
+    def __init__(self,idump=1,filedir='./',nvar=8,nbuf=3,bin=False):
+
+        #Dump directory name
+        dir=filedir+'output_'+str_suffix(idump)+'/'
+
+        #Read first output to get basic info
+        filename=dir+'slices.000000'
+        if bin:
+            data=DumsesFile(filename)
+        else:
+            data=DumsesFile_h5(filename)
+        [nxslice,nyslice,nzslice]=data.slice
+        [nxglob,nyglob,nzglob]   =data.dim_glob
+        ndim=1
+        if (nyglob>1):
+            ndim=2
+            if (nzglob>1):
+                ndim=3
+        nx=nxglob/nxslice ; ny=nyglob/nyslice ; nz=nzglob/nzslice
+        npes=nxslice*nyslice*nzslice
+        
+        self.time=data.time
+
+        #Define output arrays
+        self.x   =np.zeros(nxglob)
+        self.y   =np.zeros(nyglob)
+        self.z   =np.zeros(nzglob)
+        self.rho =np.zeros((nxglob,nyglob,nzglob  ))
+        self.rhou=np.zeros((nxglob,nyglob,nzglob,3))
+        self.E   =np.zeros((nxglob,nyglob,nzglob  ))
+        self.B   =np.zeros((nxglob,nyglob,nzglob,3))
+
+        #Loop on cpus
+        for mype in range(npes):
+
+            filename=dir+'slices.'+str_suffix(mype)
+            
+            xposition = mype % nxslice
+            yposition = mype/(nxslice*nzslice) % nyslice
+            zposition = mype/(nxslice) % nzslice
+            
+            i0=xposition*nx ; i1=(xposition+1)*nx
+            j0=yposition*ny ; j1=(yposition+1)*ny
+            k0=zposition*nz ; k1=(zposition+1)*nz
+
+            if bin:
+                data=DumsesFile(filename)
+            else:
+                data=DumsesFile_h5(filename)
+
+            self.x[i0:i1]=data.x[nbuf:nx+nbuf]
+            if nyglob>1:
+                self.y[j0:j1]=data.y[nbuf:ny+nbuf]
+            else:
+                self.y[j0:j1]=data.y[0:1]
+            if nzglob>1:
+                self.z[k0:k1]=data.z[nbuf:nz+nbuf]
+            else:
+                self.z[k0:k1]=data.z[0:1]
+
+            self.rho [i0:i1,j0:j1,k0:k1  ]=GetSubArray3d(data.xyz,0,nx,ny,nz,nbuf,ndim)
+            self.rhou[i0:i1,j0:j1,k0:k1,0]=GetSubArray3d(data.xyz,1,nx,ny,nz,nbuf,ndim)
+            self.rhou[i0:i1,j0:j1,k0:k1,1]=GetSubArray3d(data.xyz,2,nx,ny,nz,nbuf,ndim)
+            self.rhou[i0:i1,j0:j1,k0:k1,2]=GetSubArray3d(data.xyz,3,nx,ny,nz,nbuf,ndim)
+            self.E   [i0:i1,j0:j1,k0:k1  ]=GetSubArray3d(data.xyz,4,nx,ny,nz,nbuf,ndim)
+            self.B   [i0:i1,j0:j1,k0:k1,0]=GetSubArray3d(data.xyz,5,nx,ny,nz,nbuf,ndim)
+            self.B   [i0:i1,j0:j1,k0:k1,1]=GetSubArray3d(data.xyz,6,nx,ny,nz,nbuf,ndim)
+            self.B   [i0:i1,j0:j1,k0:k1,2]=GetSubArray3d(data.xyz,7,nx,ny,nz,nbuf,ndim)
+
+class DumsesFile:
+
+    def __init__(self,filename='slices.000000',nvar=8,nbuf=3):
+
+        #Open file
+        f=open(filename,'rb')
+
+        #Get data dimensions from file
+        a    =get_array(f,5,'f8') ; [self.time,dt,dx,dy,dz]=a
+        a    =get_array(f,3,'i4')
+        dim  =get_array(f,3,'i4')  ; [nx,ny,nz]=dim
+        self.slice=get_array(f,3,'i4')  ; self.dim_glob=dim*self.slice
+        
+        #Get ndim and allocate arrays
+        ndim=1
+        self.x=np.zeros(nx+2*nbuf) ; self.y=np.zeros(ny) ; self.z=np.zeros(nz)
+        shape=(nvar,1,1,nx+2*nbuf)
+        if ny>1:
+            ndim=2
+            self.y=np.zeros(ny+2*nbuf)
+            shape=(nvar,1,ny+2*nbuf,nx+2*nbuf)
+            if nz>1:
+                ndim=3
+                self.z=np.zeros(nz+2*nbuf)
+                shape=(nvar,nz+2*nbuf,ny+2*nbuf,nx+2*nbuf)
+                
+        #Get grid position and state variables
+        if ndim==1:
+            ntot=(nx+2*nbuf)*ny*nz*nvar
+            positions=get_array(f,nx+ny+nz+2*nbuf,'f8')
+            self.x  =positions[0           :nx      +2*nbuf]
+            self.y  =positions[nx   +2*nbuf:nx+ny   +2*nbuf]
+            self.z  =positions[nx+ny+2*nbuf:nx+ny+nz+2*nbuf]
+            self.xyz=get_array(f,ntot              ,'f8').reshape(shape)
+        if ndim==2:
+            ntot=(nx+2*nbuf)*(ny+2*nbuf)*nz*nvar
+            positions=get_array(f,nx+ny+nz+4*nbuf,'f8')
+            self.x  =positions[0           :nx      +2*nbuf]
+            self.y  =positions[nx   +2*nbuf:nx+ny   +4*nbuf]
+            self.z  =positions[nx+ny+4*nbuf:nx+ny+nz+4*nbuf]
+            self.xyz=get_array(f,ntot              ,'f8').reshape(shape)
+        if ndim==3:
+            ntot=(nx+2*nbuf)*(ny+2*nbuf)*(nz+2*nbuf)*nvar
+            positions=get_array(f,nx+ny+nz+6*nbuf,'f8')
+            self.x  =positions[0           :nx      +2*nbuf]
+            self.y  =positions[nx   +2*nbuf:nx+ny   +4*nbuf]
+            self.z  =positions[nx+ny+4*nbuf:nx+ny+nz+6*nbuf]
+            self.xyz=get_array(f,ntot              ,'f8').reshape(shape)
+
+        #Close file
+        f.close()
+
+class DumsesFile_h5:
+
+    def __init__(self,filename='slices.000000',nvar=8,nbuf=3):
+        """ Read HDF5 data output from Heracles."""
+
+        #Open file
+        f=tables.openFile(filename)
+
+        #Dataset "para_real"
+        self.time=f.root.para_real[0]
+        self.dt  =f.root.para_real[1]
+        self.dx  =f.root.para_real[2]
+        self.dy  =f.root.para_real[3]
+        self.dz  =f.root.para_real[4]
+
+        #Dataset "para_int"
+        self.ndump  =f.root.para_int[0]
+        self.nhist  =f.root.para_int[1]
+        self.nspec  =f.root.para_int[2]
+        self.nx     =f.root.para_int[3]
+        self.ny     =f.root.para_int[4]
+        self.nz     =f.root.para_int[5]
+        self.nxslice=f.root.para_int[6]
+        self.nyslice=f.root.para_int[7]
+        self.nzslice=f.root.para_int[8]
+
+        self.dim    =f.root.para_int[3:6]
+        self.slice  =f.root.para_int[6:9]
+        self.dim_glob=self.dim*self.slice
+
+        #Dataset "x", "y" and "z
+        self.x=f.root.x[:]
+        self.y=f.root.y[:]
+        self.z=f.root.z[:]
+
+        #Dataset "uin"
+        self.xyz=f.root.uin[:,:,:,:]
+
+        #Dataset "para_mpi"
+        if (self.nxslice*self.nyslice*self.nzslice>1):
+            self.xleft =f.root.para_mpi[0]
+            self.xright=f.root.para_mpi[1]
+            self.yleft =f.root.para_mpi[2]
+            self.yright=f.root.para_mpi[3]
+            self.zleft =f.root.para_mpi[4]
+            self.zright=f.root.para_mpi[5]
+            self.xposition=f.root.para_mpi[6]
+            self.yposition=f.root.para_mpi[7]
+            self.zposition=f.root.para_mpi[8]
+
+        #Close file
+        f.close()
+
+class DumsesFile_h5_Collective:
+
+    def __init__(self,filename='slices.000000',nvar=8,nbuf=3):
+        """ Read HDF5 data output from Heracles."""
+
+        #Open file
+        f=tables.openFile(filename)
+
+        #Dataset "para_real"
+        self.time=f.root.para_real[0]
+        self.dt  =f.root.para_real[1]
+        self.dx  =f.root.para_real[2]
+        self.dy  =f.root.para_real[3]
+        self.dz  =f.root.para_real[4]
+
+        #Dataset "para_int"
+        self.ndump  =f.root.para_int[0]
+        self.nhist  =f.root.para_int[1]
+        self.nspec  =f.root.para_int[2]
+        self.nx     =f.root.para_int[3]
+        self.ny     =f.root.para_int[4]
+        self.nz     =f.root.para_int[5]
+        self.nxslice=f.root.para_int[6]
+        self.nyslice=f.root.para_int[7]
+        self.nzslice=f.root.para_int[8]
+
+        self.dim    =f.root.para_int[3:6]
+        self.slice  =f.root.para_int[6:9]
+        self.dim_glob=self.dim*self.slice
+
+        #Dataset "boxSize"
+        self.xmin=f.root.boxSize[0]
+        self.xmax=f.root.boxSize[1]
+        self.ymin=f.root.boxSize[2]
+        self.ymax=f.root.boxSize[3]
+        self.zmin=f.root.boxSize[4]
+        self.zmax=f.root.boxSize[5]
+
+        #Get global sizes
+        nxglob=self.dim_glob[0]
+        nyglob=self.dim_glob[1]
+        nzglob=self.dim_glob[2]
+        ndim=1
+        if (nyglob>1):
+            ndim=ndim+1
+            if (nzglob>1):
+                ndim=ndim+1
+
+        print ndim,nxglob,nyglob,nzglob
+        print np.shape(f.root.rho_vx)
+        print self.xmin,self.xmax,self.zmin,self.zmax
+
+        #Define arrays
+        self.rhou=np.zeros((nxglob,nyglob,nzglob,ndim))
+        self.B=np.zeros((nxglob,nyglob,nzglob,ndim))
+
+        #Get datacubes (rho,E,rhou,B)
+        self.rho=np.transpose(f.root.rho[:,:,:],(2,1,0))
+        self.E=np.transpose(f.root.E[:,:,:],(2,1,0))
+        self.rhou[:,:,:,0]=np.transpose(f.root.rho_vx[:,:,:],(2,1,0))
+        self.rhou[:,:,:,1]=np.transpose(f.root.rho_vy[:,:,:],(2,1,0))
+        self.rhou[:,:,:,2]=np.transpose(f.root.rho_vz[:,:,:],(2,1,0))
+        self.B[:,:,:,0]=np.transpose(f.root.Bx[:,:,:],(2,1,0))
+        self.B[:,:,:,1]=np.transpose(f.root.By[:,:,:],(2,1,0))
+        self.B[:,:,:,2]=np.transpose(f.root.Bz[:,:,:],(2,1,0))
+
+        print f.root.rho[:,0,0]
+
+        #Close file
+        f.close()
+
+def get_array(fid,nb_count,type):
+    bits_nb='i4'
+    pad=np.fromfile(fid,count=1,dtype=bits_nb)
+    array=np.fromfile(fid,count=nb_count,dtype=type)
+    pad=np.fromfile(fid,count=1,dtype=bits_nb)
+    return array
+
+def GetSubArray3d(array,ivar,nx,ny,nz,nbuf,ndim):
+    if ndim==1:
+        SubArray3d=np.transpose(array[ivar,0:nz,0:ny,nbuf:nx+nbuf],(2,1,0))  
+    if ndim==2:
+        SubArray3d=np.transpose(array[ivar,0:nz,nbuf:ny+nbuf,nbuf:nx+nbuf],(2,1,0))  
+    if ndim==3:
+        SubArray3d=np.transpose(array[ivar,nbuf:nz+nbuf,nbuf:ny+nbuf,nbuf:nx+nbuf],(2,1,0))  
+    
+    return SubArray3d
+
+def GetRoot(b1,b2,b3,b4,guess=0.5):
+    #Solve quartic equation (x**4+b1*x**3+b2*x**2+b3*x+b4) with Newton-Raphson algorithm
+    x=guess ; epsilon=1.
+    while (epsilon>1.e-12):
+        root=Getf(x,b1,b2,b3,b4)
+        droot=Getfprime(x,b1,b2,b3)
+        x=x-root/droot
+        epsilon=abs(root)
+    return x
+
+def Getf(x,b1,b2,b3,b4):
+  return x**4+b1*x**3+b2*x**2+b3*x+b4 
+
+def Getfprime(x,b1,b2,b3):
+  return 4*x**3+3*b1*x**2+2*b2*x+b3 
+
